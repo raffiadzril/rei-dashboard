@@ -1,0 +1,664 @@
+"use client"
+
+import type React from "react"
+
+import { useEffect, useState } from "react"
+import { DashboardSidebar } from "@/components/dashboard-sidebar"
+import { DashboardHeader } from "@/components/dashboard-header"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { supabase, type Challenge, type Question, type Option, type User, type UserAnswer, type REIAccumulate } from "@/lib/supabase"
+import { Download, FileSpreadsheet, Users, Target } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import * as XLSX from 'xlsx'
+
+interface UserResult {
+  user_id: string
+  user_name: string
+  user_school: string
+  user_gender: string
+  user_age: number
+  user_class: string
+  challenge_id: string
+  challenge_title: string
+  answers: { [questionId: string]: { question_text: string; selected_option: string; score: number } }
+  rei_data?: {
+    respect: number
+    equity: number
+    inclusion: number
+    respect_category: string
+    equity_category: string
+    inclusion_category: string
+    label_anak_ramah_category: string
+    label_anak_ramah_category_respect: string
+    label_anak_ramah_category_equity: string
+    label_anak_ramah_category_inclusion: string
+  }
+}
+
+export default function ResultsPage() {
+  const [results, setResults] = useState<UserResult[]>([])
+  const [filteredResults, setFilteredResults] = useState<UserResult[]>([])
+  const [challenges, setChallenges] = useState<Challenge[]>([])
+  const [selectedChallengeId, setSelectedChallengeId] = useState<string>("")
+  const [selectedSchool, setSelectedSchool] = useState<string>("all")
+  const [selectedClass, setSelectedClass] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
+  const [showDetailedView, setShowDetailedView] = useState(true)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    fetchChallenges()
+  }, [])
+
+  useEffect(() => {
+    if (selectedChallengeId) {
+      fetchResults()
+    }
+  }, [selectedChallengeId])
+
+  useEffect(() => {
+    // Filter results based on selected school and class
+    let filtered = results
+    
+    if (selectedSchool !== "all") {
+      filtered = filtered.filter(result => result.user_school === selectedSchool)
+    }
+    
+    if (selectedClass !== "all") {
+      filtered = filtered.filter(result => result.user_class === selectedClass)
+    }
+    
+    setFilteredResults(filtered)
+  }, [results, selectedSchool, selectedClass])
+
+  const fetchChallenges = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("challenges")
+        .select("*")
+        .order("title", { ascending: true })
+
+      if (error) {
+        throw error
+      }
+
+      setChallenges(data || [])
+      if (data && data.length > 0) {
+        setSelectedChallengeId(data[0].id)
+      }
+    } catch (error) {
+      console.error("Error fetching challenges:", error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch challenges",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const fetchResults = async () => {
+    if (!selectedChallengeId) return
+
+    setLoading(true)
+    try {
+      // Fetch all questions for the selected challenge
+      const { data: questions, error: questionsError } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("challenge_id", selectedChallengeId)
+        .order("question_number", { ascending: true })
+
+      if (questionsError) throw questionsError
+
+      // Fetch all user answers for this challenge
+      const { data: userAnswers, error: answersError } = await supabase
+        .from("user_answers")
+        .select(`
+          *,
+          users (
+            id,
+            name,
+            school,
+            gender,
+            age,
+            class
+          ),
+          questions (
+            id,
+            question_text,
+            question_number,
+            challenge_id
+          ),
+          options (
+            id,
+            option_text,
+            score_option
+          )
+        `)
+        .in("question_id", questions?.map(q => q.id) || [])
+
+      if (answersError) throw answersError
+
+      // Fetch REI data for all users
+      const uniqueUserIds = [...new Set(userAnswers?.map(ua => ua.user_id) || [])]
+      const { data: reiData, error: reiError } = await supabase
+        .from("rei_accumulate")
+        .select("*")
+        .in("user_id", uniqueUserIds)
+
+      if (reiError) throw reiError
+
+      // Process and group data by user
+      const userResultsMap = new Map<string, UserResult>()
+
+      userAnswers?.forEach((answer: any) => {
+        const userId = answer.user_id
+        const user = answer.users
+        const question = answer.questions
+        const option = answer.options
+
+        if (!userResultsMap.has(userId)) {
+          const userReiData = reiData?.find(rei => rei.user_id === userId)
+          
+          userResultsMap.set(userId, {
+            user_id: userId,
+            user_name: user?.name || "Unknown",
+            user_school: user?.school || "",
+            user_gender: user?.gender || "",
+            user_age: user?.age || 0,
+            user_class: user?.class || "",
+            challenge_id: selectedChallengeId,
+            challenge_title: challenges.find(c => c.id === selectedChallengeId)?.title || "",
+            answers: {},
+            rei_data: userReiData ? {
+              respect: userReiData.respect || 0,
+              equity: userReiData.equity || 0,
+              inclusion: userReiData.inclusion || 0,
+              respect_category: userReiData.respect_category || "",
+              equity_category: userReiData.equity_category || "",
+              inclusion_category: userReiData.inclussion_category || "",
+              label_anak_ramah_category: userReiData.label_anak_ramah_category || "",
+              label_anak_ramah_category_respect: userReiData.label_anak_ramah_category_respect || "",
+              label_anak_ramah_category_equity: userReiData.label_anak_ramah_category_equity || "",
+              label_anak_ramah_category_inclusion: userReiData.label_anak_ramah_category_inclusion || "",
+            } : undefined
+          })
+        }
+
+        const userResult = userResultsMap.get(userId)!
+        userResult.answers[question?.id] = {
+          question_text: question?.question_text || "",
+          selected_option: option?.option_text || "No answer",
+          score: option?.score_option || 0
+        }
+      })
+
+      setResults(Array.from(userResultsMap.values()))
+    } catch (error) {
+      console.error("Error fetching results:", error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch results",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const exportToExcel = async () => {
+    if (filteredResults.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No data to export",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setExporting(true)
+    try {
+      // Get all unique questions for headers
+      const allQuestions = new Set<string>()
+      filteredResults.forEach(result => {
+        Object.keys(result.answers).forEach(questionId => {
+          allQuestions.add(questionId)
+        })
+      })
+
+      // Create headers
+      const headers = [
+        "User Name",
+        "School",
+        "Gender", 
+        "Age",
+        "Class",
+        "Challenge",
+        ...Array.from(allQuestions).map(qId => {
+          const question = filteredResults[0]?.answers[qId]?.question_text || `Question ${qId}`
+          return question.length > 50 ? question.substring(0, 50) + "..." : question
+        }),
+        // REI Data headers
+        "REI - Respect Score",
+        "REI - Equity Score", 
+        "REI - Inclusion Score",
+        "REI - Respect Category",
+        "REI - Equity Category",
+        "REI - Inclusion Category",
+        "REI - Label Anak Ramah",
+        "REI - Label Respect",
+        "REI - Label Equity", 
+        "REI - Label Inclusion"
+      ]
+
+      // Create data rows
+      const data = filteredResults.map(result => {
+        const row = [
+          result.user_name,
+          result.user_school,
+          result.user_gender,
+          result.user_age,
+          result.user_class,
+          result.challenge_title,
+          ...Array.from(allQuestions).map(qId => 
+            result.answers[qId]?.selected_option || "No answer"
+          ),
+          // REI Data
+          result.rei_data?.respect || "",
+          result.rei_data?.equity || "",
+          result.rei_data?.inclusion || "",
+          result.rei_data?.respect_category || "",
+          result.rei_data?.equity_category || "",
+          result.rei_data?.inclusion_category || "",
+          result.rei_data?.label_anak_ramah_category || "",
+          result.rei_data?.label_anak_ramah_category_respect || "",
+          result.rei_data?.label_anak_ramah_category_equity || "",
+          result.rei_data?.label_anak_ramah_category_inclusion || "",
+        ]
+        return row
+      })
+
+      // Create workbook
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "User Results")
+
+      // Generate filename with timestamp
+      const challengeTitle = challenges.find(c => c.id === selectedChallengeId)?.title || "Challenge"
+      const timestamp = new Date().toISOString().split('T')[0]
+      const filename = `${challengeTitle}_Results_${timestamp}.xlsx`
+
+      // Download file
+      XLSX.writeFile(wb, filename)
+
+      toast({
+        title: "Success",
+        description: "Results exported successfully",
+      })
+    } catch (error) {
+      console.error("Error exporting to Excel:", error)
+      toast({
+        title: "Error",
+        description: "Failed to export results",
+        variant: "destructive",
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // Get all unique questions for table headers from filtered results
+  const allQuestions = new Set<string>()
+  const questionDetails = new Map<string, { text: string; number: number }>()
+  
+  filteredResults.forEach(result => {
+    Object.entries(result.answers).forEach(([questionId, answerData]) => {
+      allQuestions.add(questionId)
+      questionDetails.set(questionId, {
+        text: answerData.question_text,
+        number: questionDetails.get(questionId)?.number || Object.keys(questionDetails).length + 1
+      })
+    })
+  })
+
+  const sortedQuestions = Array.from(allQuestions).sort((a, b) => {
+    const aNum = questionDetails.get(a)?.number || 0
+    const bNum = questionDetails.get(b)?.number || 0
+    return aNum - bNum
+  })
+
+  return (
+    <div className="flex h-screen bg-gray-100">
+      <DashboardSidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <DashboardHeader />
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
+          <div className="max-w-full space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">User Results Summary</h1>
+                <p className="text-gray-600">View and export user answers in a comprehensive format</p>
+              </div>
+              <div className="flex items-center gap-4 flex-wrap">
+                <Select value={selectedChallengeId} onValueChange={setSelectedChallengeId}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select a challenge" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {challenges.map((challenge) => (
+                      <SelectItem key={challenge.id} value={challenge.id}>
+                        {challenge.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={selectedSchool} onValueChange={setSelectedSchool}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="All Schools" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Schools</SelectItem>
+                    {[...new Set(results.map(r => r.user_school).filter(Boolean))].map((school) => (
+                      <SelectItem key={school} value={school}>
+                        {school}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={selectedClass} onValueChange={setSelectedClass}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="All Classes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Classes</SelectItem>
+                    {[...new Set(results.map(r => r.user_class).filter(Boolean))].map((cls) => (
+                      <SelectItem key={cls} value={cls}>
+                        {cls}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowDetailedView(!showDetailedView)}
+                  className="flex items-center gap-2"
+                >
+                  {showDetailedView ? "Compact View" : "Detailed View"}
+                </Button>
+                
+                <Button 
+                  onClick={exportToExcel} 
+                  disabled={loading || exporting || filteredResults.length === 0}
+                  className="flex items-center gap-2"
+                >
+                  {exporting ? (
+                    <>
+                      <FileSpreadsheet className="h-4 w-4 animate-spin" />
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      Export to Excel
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{filteredResults.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedSchool !== "all" || selectedClass !== "all" ? "Filtered users" : "Users who completed this challenge"}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Questions</CardTitle>
+                  <Target className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{sortedQuestions.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Total questions in challenge
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Challenge</CardTitle>
+                  <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-lg font-bold truncate">
+                    {challenges.find(c => c.id === selectedChallengeId)?.title || "None"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Selected challenge
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Results Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Results Overview</CardTitle>
+                <CardDescription>
+                  Each row represents one user with their answers to all questions
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center items-center h-32">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                  </div>
+                ) : filteredResults.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    {results.length === 0 
+                      ? "No results found for the selected challenge"
+                      : "No results match the selected filters"
+                    }
+                  </div>
+                ) : (
+                  <div className="w-full overflow-hidden">
+                    <ScrollArea className="h-[600px]">
+                      <div className="overflow-x-auto min-w-full">
+                        <Table className="min-w-max">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="sticky left-0 bg-white border-r-2 z-20 min-w-[140px] shadow-sm">
+                                User
+                              </TableHead>
+                              <TableHead className="sticky left-[140px] bg-white border-r z-10 min-w-[120px] shadow-sm">
+                                School
+                              </TableHead>
+                              <TableHead className="min-w-[80px]">Gender</TableHead>
+                              <TableHead className="min-w-[60px]">Age</TableHead>
+                              <TableHead className="min-w-[80px]">Class</TableHead>
+                              {sortedQuestions.map((questionId, index) => (
+                                <TableHead key={questionId} className="min-w-[250px] max-w-[300px]">
+                                  <div className="space-y-1">
+                                    <div className="font-semibold">Q{index + 1}</div>
+                                    <div className="text-xs font-normal text-gray-600 leading-tight">
+                                      {(questionDetails.get(questionId)?.text || "").length > 50 
+                                        ? (questionDetails.get(questionId)?.text || "").substring(0, 50) + "..."
+                                        : questionDetails.get(questionId)?.text
+                                      }
+                                    </div>
+                                  </div>
+                                </TableHead>
+                              ))}
+                              <TableHead className="min-w-[100px] bg-blue-50">
+                                <div className="text-center">
+                                  <div className="font-semibold">REI</div>
+                                  <div className="text-xs">Respect</div>
+                                </div>
+                              </TableHead>
+                              <TableHead className="min-w-[100px] bg-green-50">
+                                <div className="text-center">
+                                  <div className="font-semibold">REI</div>
+                                  <div className="text-xs">Equity</div>
+                                </div>
+                              </TableHead>
+                              <TableHead className="min-w-[100px] bg-purple-50">
+                                <div className="text-center">
+                                  <div className="font-semibold">REI</div>
+                                  <div className="text-xs">Inclusion</div>
+                                </div>
+                              </TableHead>
+                              <TableHead className="min-w-[150px] bg-yellow-50">
+                                <div className="text-center">
+                                  <div className="font-semibold">Label</div>
+                                  <div className="text-xs">Anak Ramah</div>
+                                </div>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredResults.map((result) => (
+                              <TableRow key={result.user_id} className="hover:bg-gray-50">
+                                <TableCell className="sticky left-0 bg-white border-r-2 z-20 shadow-sm">
+                                  <div className="space-y-1">
+                                    <div className="font-semibold text-sm">{result.user_name}</div>
+                                    <div className="text-xs text-gray-500">{result.user_id.substring(0, 8)}...</div>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="sticky left-[140px] bg-white border-r z-10 shadow-sm">
+                                  <div className="text-sm">{result.user_school || "—"}</div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-xs">
+                                    {result.user_gender || "—"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-center">{result.user_age || "—"}</TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {result.user_class || "—"}
+                                  </Badge>
+                                </TableCell>
+                                {sortedQuestions.map((questionId) => (
+                                  <TableCell key={questionId} className="max-w-[300px]">
+                                    <div className="space-y-1">
+                                      <div 
+                                        className="text-sm leading-tight break-words"
+                                        title={result.answers[questionId]?.selected_option || "No answer"}
+                                      >
+                                        {result.answers[questionId]?.selected_option || (
+                                          <span className="text-gray-400 italic">No answer</span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs text-gray-500">Score:</span>
+                                        <Badge 
+                                          variant={result.answers[questionId]?.score ? "default" : "secondary"}
+                                          className="text-xs"
+                                        >
+                                          {result.answers[questionId]?.score || 0}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                ))}
+                                <TableCell className="bg-blue-50">
+                                  <div className="text-center">
+                                    <Badge 
+                                      variant={result.rei_data?.respect ? "default" : "secondary"}
+                                      className="text-sm"
+                                    >
+                                      {result.rei_data?.respect || "—"}
+                                    </Badge>
+                                    {result.rei_data?.respect_category && (
+                                      <div className="text-xs text-gray-600 mt-1">
+                                        {result.rei_data.respect_category}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="bg-green-50">
+                                  <div className="text-center">
+                                    <Badge 
+                                      variant={result.rei_data?.equity ? "default" : "secondary"}
+                                      className="text-sm"
+                                    >
+                                      {result.rei_data?.equity || "—"}
+                                    </Badge>
+                                    {result.rei_data?.equity_category && (
+                                      <div className="text-xs text-gray-600 mt-1">
+                                        {result.rei_data.equity_category}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="bg-purple-50">
+                                  <div className="text-center">
+                                    <Badge 
+                                      variant={result.rei_data?.inclusion ? "default" : "secondary"}
+                                      className="text-sm"
+                                    >
+                                      {result.rei_data?.inclusion || "—"}
+                                    </Badge>
+                                    {result.rei_data?.inclusion_category && (
+                                      <div className="text-xs text-gray-600 mt-1">
+                                        {result.rei_data.inclusion_category}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="bg-yellow-50">
+                                  <div className="text-center space-y-1">
+                                    <div className="text-xs font-medium">
+                                      {result.rei_data?.label_anak_ramah_category || "—"}
+                                    </div>
+                                    <div className="text-xs text-gray-600">
+                                      R: {result.rei_data?.label_anak_ramah_category_respect || "—"}
+                                    </div>
+                                    <div className="text-xs text-gray-600">
+                                      E: {result.rei_data?.label_anak_ramah_category_equity || "—"}
+                                    </div>
+                                    <div className="text-xs text-gray-600">
+                                      I: {result.rei_data?.label_anak_ramah_category_inclusion || "—"}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </ScrollArea>
+                    
+                    {/* Scroll Hint */}
+                    <div className="mt-2 text-xs text-gray-500 text-center">
+                      💡 Scroll horizontally to see all questions and REI data
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
