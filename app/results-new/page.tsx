@@ -191,36 +191,6 @@ export default function ResultsPage() {
     }
   }
 
-  const getSortedQuestions = (results: UserResult[]) => {
-    const allQuestionsMap = new Map<string, { text: string; number: number }>()
-    
-    results.forEach(result => {
-      Object.entries(result.answers).forEach(([questionId, answerData]) => {
-        if (!allQuestionsMap.has(questionId)) {
-          // Try to extract question number from question text or use sequential numbering
-          const questionText = answerData.question_text
-          let questionNumber = allQuestionsMap.size + 1
-          
-          // Try to find number pattern in question text (e.g., "Question 1:", "1.", etc.)
-          const numberMatch = questionText.match(/^(?:Question\s*)?(\d+)[\.\:\s]/)
-          if (numberMatch) {
-            questionNumber = parseInt(numberMatch[1], 10)
-          }
-          
-          allQuestionsMap.set(questionId, {
-            text: questionText,
-            number: questionNumber
-          })
-        }
-      })
-    })
-
-    // Sort questions by their number
-    return Array.from(allQuestionsMap.entries()).sort((a, b) => {
-      return a[1].number - b[1].number
-    })
-  }
-
   const exportToExcel = async () => {
     if (results.length === 0) {
       toast({
@@ -233,10 +203,15 @@ export default function ResultsPage() {
 
     setExporting(true)
     try {
-      // Get sorted questions using helper function
-      const sortedQuestions = getSortedQuestions(results)
+      // Get all unique questions for headers
+      const allQuestions = new Set<string>()
+      results.forEach(result => {
+        Object.keys(result.answers).forEach(questionId => {
+          allQuestions.add(questionId)
+        })
+      })
 
-      // Create headers with proper question text
+      // Create headers
       const headers = [
         "User Name",
         "School",
@@ -244,10 +219,9 @@ export default function ResultsPage() {
         "Age",
         "Class",
         "Challenge",
-        ...sortedQuestions.map(([questionId, questionData]) => {
-          const questionText = questionData.text || `Question ${questionData.number}`
-          // Limit header length for Excel readability
-          return questionText.length > 80 ? questionText.substring(0, 80) + "..." : questionText
+        ...Array.from(allQuestions).map(qId => {
+          const question = results[0]?.answers[qId]?.question_text || `Question ${qId}`
+          return question.length > 50 ? question.substring(0, 50) + "..." : question
         }),
         // REI Data headers
         "REI - Respect Score",
@@ -262,7 +236,7 @@ export default function ResultsPage() {
         "REI - Label Inclusion"
       ]
 
-      // Create data rows with consistent question order
+      // Create data rows
       const data = results.map(result => {
         const row = [
           result.user_name,
@@ -271,8 +245,8 @@ export default function ResultsPage() {
           result.user_age,
           result.user_class,
           result.challenge_title,
-          ...sortedQuestions.map(([questionId]) => 
-            result.answers[questionId]?.selected_option || "No answer"
+          ...Array.from(allQuestions).map(qId => 
+            result.answers[qId]?.selected_option || "No answer"
           ),
           // REI Data
           result.rei_data?.respect || "",
@@ -291,29 +265,6 @@ export default function ResultsPage() {
 
       // Create workbook
       const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
-      
-      // Set column widths for better readability
-      const colWidths = [
-        { wch: 15 }, // User Name
-        { wch: 20 }, // School
-        { wch: 10 }, // Gender
-        { wch: 8 },  // Age
-        { wch: 10 }, // Class
-        { wch: 20 }, // Challenge
-        ...sortedQuestions.map(() => ({ wch: 30 })), // Questions
-        { wch: 12 }, // REI Respect
-        { wch: 12 }, // REI Equity
-        { wch: 12 }, // REI Inclusion
-        { wch: 15 }, // REI Respect Category
-        { wch: 15 }, // REI Equity Category
-        { wch: 15 }, // REI Inclusion Category
-        { wch: 20 }, // REI Label Anak Ramah
-        { wch: 20 }, // REI Label Respect
-        { wch: 20 }, // REI Label Equity
-        { wch: 20 }, // REI Label Inclusion
-      ]
-      ws['!cols'] = colWidths
-
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, "User Results")
 
@@ -341,10 +292,25 @@ export default function ResultsPage() {
     }
   }
 
-  // Get all unique questions for table headers using helper function
-  const sortedQuestionsEntries = getSortedQuestions(results)
-  const sortedQuestions = sortedQuestionsEntries.map(([questionId]) => questionId)
-  const questionDetails = new Map(sortedQuestionsEntries)
+  // Get all unique questions for table headers
+  const allQuestions = new Set<string>()
+  const questionDetails = new Map<string, { text: string; number: number }>()
+  
+  results.forEach(result => {
+    Object.entries(result.answers).forEach(([questionId, answerData]) => {
+      allQuestions.add(questionId)
+      questionDetails.set(questionId, {
+        text: answerData.question_text,
+        number: questionDetails.get(questionId)?.number || Object.keys(questionDetails).length + 1
+      })
+    })
+  })
+
+  const sortedQuestions = Array.from(allQuestions).sort((a, b) => {
+    const aNum = questionDetails.get(a)?.number || 0
+    const bNum = questionDetails.get(b)?.number || 0
+    return aNum - bNum
+  })
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -353,7 +319,7 @@ export default function ResultsPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-hidden bg-gray-100 p-6">
           <div className="h-full max-w-full mx-auto space-y-6 flex flex-col">
-            <div className="flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">User Results Summary</h1>
                 <p className="text-gray-600">View and export user answers in a comprehensive format</p>
@@ -392,7 +358,7 @@ export default function ResultsPage() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-shrink-0">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -436,29 +402,27 @@ export default function ResultsPage() {
             </div>
 
             {/* Results Table */}
-            <Card className="flex-1 flex flex-col overflow-hidden">
-              <CardHeader className="flex-shrink-0">
+            <Card className="flex-1 flex flex-col">
+              <CardHeader>
                 <CardTitle>Results Overview</CardTitle>
                 <CardDescription>
                   Each row represents one user with their answers to all questions. Scroll horizontally to view all data.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex-1 p-0 overflow-hidden">
+              <CardContent className="flex-1 p-0">
                 {loading ? (
-                  <div className="flex justify-center items-center h-full">
+                  <div className="flex justify-center items-center h-32">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
                   </div>
                 ) : results.length === 0 ? (
-                  <div className="flex justify-center items-center h-full text-gray-500">
+                  <div className="text-center py-8 text-gray-500">
                     No results found for the selected challenge
                   </div>
                 ) : (
-                  <div className="h-full">
+                  <div className="h-full border rounded-lg bg-white">
                     <div 
-                      className="overflow-auto border rounded-lg bg-white"
+                      className="overflow-auto h-full"
                       style={{ 
-                        height: 'calc(100vh - 400px)', // Increased from 380px to 400px for more breathing room
-                        maxHeight: 'calc(100vh - 400px)',
                         scrollbarWidth: 'thin',
                         scrollbarColor: '#cbd5e1 #f1f5f9'
                       }}
@@ -475,9 +439,7 @@ export default function ResultsPage() {
                             {sortedQuestions.map((questionId, index) => (
                               <th key={questionId} className="p-3 text-left font-semibold text-sm border-b bg-blue-50" style={{ minWidth: '300px' }}>
                                 <div className="space-y-1">
-                                  <div className="font-bold text-blue-700">
-                                    Question {questionDetails.get(questionId)?.number || (index + 1)}
-                                  </div>
+                                  <div className="font-bold text-blue-700">Question {index + 1}</div>
                                   <div className="font-normal text-xs text-gray-600 leading-tight" style={{ 
                                     display: '-webkit-box',
                                     WebkitLineClamp: 2,
@@ -498,14 +460,8 @@ export default function ResultsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {results.map((result, rowIndex) => {
-                            const isLastRow = rowIndex === results.length - 1
-                            return (
-                              <tr 
-                                key={result.user_id} 
-                                className={`${rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${isLastRow ? "pb-4" : ""}`}
-                                style={isLastRow ? { paddingBottom: '24px' } : {}}
-                              >
+                          {results.map((result, rowIndex) => (
+                            <tr key={result.user_id} className={rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
                               <td className="sticky left-0 bg-white border-r-2 z-10 p-3 font-medium border-b" style={{ minWidth: '160px' }}>
                                 <div className="space-y-2">
                                   <div className="font-semibold text-sm text-gray-900" title={result.user_name}>
@@ -580,16 +536,13 @@ export default function ResultsPage() {
                                 </div>
                               </td>
                             </tr>
-                            )
-                          })}
+                          ))}
                         </tbody>
                       </table>
-                      {/* Spacer to ensure last row is fully visible */}
-                      <div style={{ height: '40px' }}></div>
                     </div>
                     
-                    {/* Scroll instruction - positioned outside scroll area */}
-                    <div className="border-t bg-gray-50 px-4 py-2 flex-shrink-0">
+                    {/* Scroll instruction */}
+                    <div className="border-t bg-gray-50 px-4 py-2">
                       <p className="text-xs text-gray-600 text-center">
                         💡 Scroll horizontally to view all questions and REI data →
                       </p>

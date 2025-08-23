@@ -353,6 +353,8 @@ export default function ResultsPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-hidden bg-gray-100 p-6">
           <div className="h-full max-w-full mx-auto space-y-6 flex flex-col">
+            
+            {/* Header */}
             <div className="flex items-center justify-between flex-shrink-0">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">User Results Summary</h1>
@@ -440,7 +442,7 @@ export default function ResultsPage() {
               <CardHeader className="flex-shrink-0">
                 <CardTitle>Results Overview</CardTitle>
                 <CardDescription>
-                  Each row represents one user with their answers to all questions. Scroll horizontally to view all data.
+                  Each row represents one user with their answers to all questions. Scroll to view all data.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-1 p-0 overflow-hidden">
@@ -453,12 +455,11 @@ export default function ResultsPage() {
                     No results found for the selected challenge
                   </div>
                 ) : (
-                  <div className="h-full">
+                  <div className="h-full flex flex-col">
+                    {/* Table Container with proper scrolling */}
                     <div 
-                      className="overflow-auto border rounded-lg bg-white"
+                      className="flex-1 overflow-auto border rounded-lg bg-white"
                       style={{ 
-                        height: 'calc(100vh - 400px)', // Increased from 380px to 400px for more breathing room
-                        maxHeight: 'calc(100vh - 400px)',
                         scrollbarWidth: 'thin',
                         scrollbarColor: '#cbd5e1 #f1f5f9'
                       }}
@@ -498,14 +499,8 @@ export default function ResultsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {results.map((result, rowIndex) => {
-                            const isLastRow = rowIndex === results.length - 1
-                            return (
-                              <tr 
-                                key={result.user_id} 
-                                className={`${rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${isLastRow ? "pb-4" : ""}`}
-                                style={isLastRow ? { paddingBottom: '24px' } : {}}
-                              >
+                          {results.map((result, rowIndex) => (
+                            <tr key={result.user_id} className={rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
                               <td className="sticky left-0 bg-white border-r-2 z-10 p-3 font-medium border-b" style={{ minWidth: '160px' }}>
                                 <div className="space-y-2">
                                   <div className="font-semibold text-sm text-gray-900" title={result.user_name}>
@@ -533,65 +528,41 @@ export default function ResultsPage() {
                                       }}
                                       title={result.answers[questionId]?.selected_option || "No answer"}
                                     >
-                                      <strong>Answer:</strong> {result.answers[questionId]?.selected_option || "No answer"}
+                                      {result.answers[questionId]?.selected_option || "No answer"}
                                     </div>
-                                    <div>
-                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                        Score: {result.answers[questionId]?.score || 0}
-                                      </span>
+                                    <div className="text-xs text-blue-600 font-medium">
+                                      Score: {result.answers[questionId]?.score || 0}
                                     </div>
                                   </div>
                                 </td>
                               ))}
-                              <td className="p-3 border-b text-sm" style={{ minWidth: '100px' }}>
+                              <td className="p-3 text-sm border-b" style={{ minWidth: '100px' }}>
                                 <div className="space-y-1">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-medium">R:</span>
-                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                      result.rei_data?.respect ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                                    }`}>
-                                      {result.rei_data?.respect || "—"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-medium">E:</span>
-                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                      result.rei_data?.equity ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                                    }`}>
-                                      {result.rei_data?.equity || "—"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-medium">I:</span>
-                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                      result.rei_data?.inclusion ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                                    }`}>
-                                      {result.rei_data?.inclusion || "—"}
-                                    </span>
+                                  <div className="font-medium text-xs">
+                                    <div><strong>R:</strong> {result.rei_data?.respect || "—"}</div>
+                                    <div><strong>E:</strong> {result.rei_data?.equity || "—"}</div>
+                                    <div><strong>I:</strong> {result.rei_data?.inclusion || "—"}</div>
                                   </div>
                                 </div>
                               </td>
                               <td className="p-3 text-sm border-b" style={{ minWidth: '200px' }}>
                                 <div className="space-y-1 text-xs">
-                                  <div><strong>Main:</strong> {result.rei_data?.label_anak_ramah_category || "—"}</div>
+                                  <div><strong>Overall:</strong> {result.rei_data?.label_anak_ramah_category || "—"}</div>
                                   <div><strong>Respect:</strong> {result.rei_data?.label_anak_ramah_category_respect || "—"}</div>
                                   <div><strong>Equity:</strong> {result.rei_data?.label_anak_ramah_category_equity || "—"}</div>
                                   <div><strong>Inclusion:</strong> {result.rei_data?.label_anak_ramah_category_inclusion || "—"}</div>
                                 </div>
                               </td>
                             </tr>
-                            )
-                          })}
+                          ))}
                         </tbody>
                       </table>
-                      {/* Spacer to ensure last row is fully visible */}
-                      <div style={{ height: '40px' }}></div>
                     </div>
                     
                     {/* Scroll instruction - positioned outside scroll area */}
                     <div className="border-t bg-gray-50 px-4 py-2 flex-shrink-0">
                       <p className="text-xs text-gray-600 text-center">
-                        💡 Scroll horizontally to view all questions and REI data →
+                        💡 Scroll horizontally and vertically to view all questions and REI data →
                       </p>
                     </div>
                   </div>
