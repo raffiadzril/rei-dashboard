@@ -78,3 +78,9 @@ export interface REIAccumulate {
   created_at: string
   user?: User
 }
+
+export interface UserAdmin {
+  id: number
+  username: string
+  password: string
+}

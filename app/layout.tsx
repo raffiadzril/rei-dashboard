@@ -2,6 +2,8 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Poppins } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
+import { AuthGuard } from "@/components/auth-guard"
+import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
 const poppins = Poppins({
@@ -34,7 +36,10 @@ export default function RootLayout({
       </head>
       <body className={`${poppins.className} antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          {children}
+          <AuthGuard>
+            {children}
+          </AuthGuard>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
