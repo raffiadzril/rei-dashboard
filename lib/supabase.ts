@@ -16,6 +16,13 @@ export interface User {
   class?: string
   role?: string
   profile_image_url?: string
+  education_level?: string
+  is_active_sports_member?: string
+  sports_duration?: string
+  sports_frequency?: string
+  sports_liking?: string
+  has_sports_competition?: string
+  likes_sports_competition?: string
   created_at?: string
   updated_at?: string
 }

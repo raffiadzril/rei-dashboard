@@ -11,9 +11,9 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { supabase, type Challenge, type Question, type Option, type User, type UserAnswer, type REIAccumulate } from "@/lib/supabase"
-import { Download, FileSpreadsheet, Users, Target, Eye, EyeOff, Search, ChevronLeft, ChevronRight, Calendar } from "lucide-react"
+import { Download, FileSpreadsheet, Users, Target, Eye, EyeOff, Search, ChevronLeft, ChevronRight, Calendar, Activity, School, User as UserIcon, Trophy } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 
 interface UserResult {
   user_id: string
@@ -22,6 +22,14 @@ interface UserResult {
   user_gender: string
   user_age: number
   user_class: string
+  user_role?: string
+  education_level?: string
+  is_active_sports_member?: string
+  sports_duration?: string
+  sports_frequency?: string
+  sports_liking?: string
+  has_sports_competition?: string
+  likes_sports_competition?: string
   answered_at?: string
   challenge_id: string
   challenge_title: string
@@ -30,6 +38,7 @@ interface UserResult {
     respect: number
     equity: number
     inclusion: number
+    all_category?: string
     respect_category: string
     equity_category: string
     inclusion_category: string
@@ -48,8 +57,9 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   
-  // New features state
+  // View controls state
   const [showQuestions, setShowQuestions] = useState<boolean>(true)
+  const [showSportsInfo, setShowSportsInfo] = useState<boolean>(true)
   const [searchTerm, setSearchTerm] = useState<string>("")
   const [pageSize, setPageSize] = useState<number>(25)
   const [currentPage, setCurrentPage] = useState<number>(1)
@@ -148,7 +158,15 @@ export default function ResultsPage() {
               school,
               gender,
               age,
-              class
+              class,
+              role,
+              education_level,
+              is_active_sports_member,
+              sports_duration,
+              sports_frequency,
+              sports_liking,
+              has_sports_competition,
+              likes_sports_competition
             ),
             questions (
               id,
@@ -216,6 +234,14 @@ export default function ResultsPage() {
             user_gender: user?.gender || "",
             user_age: user?.age || 0,
             user_class: user?.class || "",
+            user_role: user?.role || "murid",
+            education_level: user?.education_level || "",
+            is_active_sports_member: user?.is_active_sports_member || "",
+            sports_duration: user?.sports_duration || "",
+            sports_frequency: user?.sports_frequency || "",
+            sports_liking: user?.sports_liking || "",
+            has_sports_competition: user?.has_sports_competition || "",
+            likes_sports_competition: user?.likes_sports_competition || "",
             answered_at: answer.answered_at || userReiData?.created_at || "",
             challenge_id: selectedChallengeId,
             challenge_title: challenges.find(c => c.id === selectedChallengeId)?.title || "",
@@ -249,7 +275,7 @@ export default function ResultsPage() {
         }
       })
 
-      // Fallback: If any user doesn't have rei_data or has empty values in rei_accumulate, compute it from their answers
+      // Automatic Fallback: If any user doesn't have rei_data or has empty values in rei_accumulate, compute it from their answers
       const is13 = selectedChallengeId === 'a1b2c3d4-e5f6-7890-abcd-131313131313' || questions.length === 45
       
       userResultsMap.forEach((userResult) => {
@@ -459,18 +485,26 @@ export default function ResultsPage() {
       const sortedQuestions = getSortedQuestions(results, challengeQuestions)
       const totalQuestions = sortedQuestions.length
 
-      // Create headers with proper question text and Date
+      // Create headers with proper question text, user demographics, and sports profile
       const headers = [
+        "No",
         "Tanggal / Waktu",
-        "User Name",
-        "School",
-        "Gender",
-        "Age",
-        "Class",
+        "Nama Siswa",
+        "ID Siswa",
+        "Sekolah",
+        "Jenjang Pendidikan",
+        "Kelas",
+        "Jenis Kelamin",
+        "Usia",
+        "Anggota Klub/Ekskul Olahraga",
+        "Durasi Olahraga",
+        "Frekuensi Olahraga",
+        "Minat Olahraga",
+        "Pernah Ikut Lomba",
+        "Tertarik Ikut Lomba",
         "Challenge",
         ...sortedQuestions.map(([questionId, questionData]) => {
           const questionText = questionData.text || `Question ${questionData.number}`
-          // Limit header length for Excel readability
           return questionText.length > 80 ? questionText.substring(0, 80) + "..." : questionText
         }),
         "Pernyataan Terisi (Answered / Total)",
@@ -484,8 +518,8 @@ export default function ResultsPage() {
         "REI - Main Category"
       ]
 
-      // Create data rows with consistent question order
-      const data = results.map(result => {
+      // Create data rows with consistent order
+      const data = results.map((result, idx) => {
         const answeredCount = sortedQuestions.filter(([questionId]) => {
           const ans = result.answers[questionId]
           if (!ans || !ans.selected_option) return false
@@ -495,13 +529,22 @@ export default function ResultsPage() {
         const answeredRatio = `${answeredCount}/${totalQuestions}`
 
         const row = [
+          idx + 1,
           formatDate(result.answered_at),
-          result.user_name,
-          result.user_school,
-          result.user_gender,
-          result.user_age,
-          result.user_class,
-          result.challenge_title,
+          result.user_name || "—",
+          result.user_id || "—",
+          result.user_school || "—",
+          result.education_level || "—",
+          result.user_class || "—",
+          result.user_gender || "—",
+          result.user_age || "—",
+          result.is_active_sports_member || "—",
+          result.sports_duration || "—",
+          result.sports_frequency || "—",
+          result.sports_liking || "—",
+          result.has_sports_competition || "—",
+          result.likes_sports_competition || "—",
+          result.challenge_title || "—",
           ...sortedQuestions.map(([questionId]) =>
             result.answers[questionId]?.selected_option || "No answer"
           ),
@@ -521,20 +564,29 @@ export default function ResultsPage() {
       // Create workbook
       const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
 
-      // Set column widths for better readability
+      // Set generous column widths for better readability
       const colWidths = [
+        { wch: 6 },  // No
         { wch: 18 }, // Tanggal / Waktu
-        { wch: 15 }, // User Name
-        { wch: 20 }, // School
-        { wch: 10 }, // Gender
-        { wch: 8 },  // Age
-        { wch: 10 }, // Class
-        { wch: 20 }, // Challenge
+        { wch: 22 }, // Nama Siswa
+        { wch: 15 }, // ID Siswa
+        { wch: 22 }, // Sekolah
+        { wch: 18 }, // Jenjang Pendidikan
+        { wch: 10 }, // Kelas
+        { wch: 14 }, // Jenis Kelamin
+        { wch: 8 },  // Usia
+        { wch: 24 }, // Anggota Klub/Ekskul
+        { wch: 18 }, // Durasi Olahraga
+        { wch: 20 }, // Frekuensi Olahraga
+        { wch: 18 }, // Minat Olahraga
+        { wch: 20 }, // Pernah Ikut Lomba
+        { wch: 20 }, // Tertarik Ikut Lomba
+        { wch: 25 }, // Challenge
         ...sortedQuestions.map(() => ({ wch: 30 })), // Questions
         { wch: 20 }, // Pernyataan Terisi
-        { wch: 15 }, // REI Respect
-        { wch: 15 }, // REI Equity
-        { wch: 15 }, // REI Inclusion
+        { wch: 16 }, // REI Respect
+        { wch: 16 }, // REI Equity
+        { wch: 16 }, // REI Inclusion
         { wch: 18 }, // REI Respect Category
         { wch: 18 }, // REI Equity Category
         { wch: 18 }, // REI Inclusion Category
@@ -542,13 +594,129 @@ export default function ResultsPage() {
       ]
       ws['!cols'] = colWidths
 
+      // Apply Excel Cell Styling (Borders, Colors, Typography, Alignments)
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1')
+      const numQuestions = sortedQuestions.length
+
+      // Set Row Heights
+      const rowsHeight: { hpt: number }[] = [{ hpt: 32 }] // Header height
+      for (let r = range.s.r + 1; r <= range.e.r; r++) {
+        rowsHeight.push({ hpt: 24 }) // Data row height
+      }
+      ws['!rows'] = rowsHeight
+
+      // Border definitions
+      const thinBorder = {
+        top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        right: { style: 'thin', color: { rgb: 'CBD5E1' } },
+      }
+
+      const headerBorder = {
+        top: { style: 'medium', color: { rgb: '0F172A' } },
+        bottom: { style: 'medium', color: { rgb: '0F172A' } },
+        left: { style: 'thin', color: { rgb: '475569' } },
+        right: { style: 'thin', color: { rgb: '475569' } },
+      }
+
+      // 1. Format Header Row (Row 0)
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const address = XLSX.utils.encode_cell({ r: 0, c: C })
+        if (!ws[address]) continue
+
+        let headerColor = '1E3A8A' // Default Navy Blue (User Info)
+
+        if (C >= 9 && C <= 14) {
+          headerColor = '065F46' // Dark Emerald for Sports Profile (Cols 9-14)
+        } else if (C === 15) {
+          headerColor = '1E40AF' // Blue for Challenge
+        } else if (C >= 16 && C < 16 + numQuestions) {
+          headerColor = '0369A1' // Sky Blue for Question Columns
+        } else if (C === 16 + numQuestions) {
+          headerColor = '92400E' // Amber/Brown for Pernyataan Terisi
+        } else if (C > 16 + numQuestions) {
+          headerColor = '166534' // Forest Green for REI Scores & Categories
+        }
+
+        ws[address].s = {
+          fill: { fgColor: { rgb: headerColor } },
+          font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+          alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+          border: headerBorder,
+        }
+      }
+
+      // 2. Format Data Rows (Row 1 to End)
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        const isEven = R % 2 === 0
+        const rowBgColor = isEven ? 'FFFFFF' : 'F8FAFC' // Alternating clean zebra rows
+
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const address = XLSX.utils.encode_cell({ r: R, c: C })
+          if (!ws[address]) continue
+
+          const val = String(ws[address].v || '')
+          let align: 'left' | 'center' | 'right' = 'center'
+          let fontColor = '0F172A'
+          let isBold = false
+          let cellBg = rowBgColor
+
+          // Column Alignments: Left align text-heavy columns
+          if (C === 2 || C === 4 || C === 12 || C === 15 || (C >= 16 && C < 16 + numQuestions)) {
+            align = 'left'
+          }
+
+          // Special Highlight: Pernyataan Terisi Column
+          if (C === 16 + numQuestions) {
+            isBold = true
+            if (val.includes('/') && val.split('/')[0] === val.split('/')[1] && val.split('/')[0] !== '0') {
+              cellBg = 'DCFCE7' // Soft Light Green for complete
+              fontColor = '166534'
+            } else if (val.startsWith('0/')) {
+              cellBg = 'FEE2E2' // Soft Light Red for unattempted
+              fontColor = '991B1B'
+            } else {
+              cellBg = 'FEF3C7' // Soft Light Amber for partial
+              fontColor = '92400E'
+            }
+          }
+
+          // Special Highlight: REI Score Columns
+          if (C > 16 + numQuestions && C <= 16 + numQuestions + 3) {
+            isBold = true
+            cellBg = isEven ? 'F0FDF4' : 'DCFCE7'
+            fontColor = '15803D'
+          }
+
+          // Special Highlight: REI Category Columns
+          if (C > 16 + numQuestions + 3) {
+            isBold = true
+            if (val === 'Tinggi' || val === 'Sangat Baik' || val === 'Kamu Hebat!') {
+              fontColor = '15803D'
+            } else if (val === 'Sedang' || val === 'Baik' || val === 'Kamu Sudah Bagus!') {
+              fontColor = 'B45309'
+            } else if (val === 'Rendah' || val === 'Cukup' || val === 'Belum' || val === 'Ayo Kita Latih Sama-Sama!') {
+              fontColor = 'B91C1C'
+            }
+          }
+
+          ws[address].s = {
+            fill: { fgColor: { rgb: cellBg } },
+            font: { name: 'Calibri', sz: 10, bold: isBold, color: { rgb: fontColor } },
+            alignment: { horizontal: align, vertical: 'center', wrapText: true },
+            border: thinBorder,
+          }
+        }
+      }
+
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, "User Results")
 
       // Generate filename with timestamp
       const challengeTitle = challenges.find(c => c.id === selectedChallengeId)?.title || "Challenge"
       const timestamp = new Date().toISOString().split('T')[0]
-      const filename = `${challengeTitle}_Results_${timestamp}.xlsx`
+      const filename = `${challengeTitle.replace(/[^a-zA-Z0-9_-]/g, '_')}_Results_${timestamp}.xlsx`
 
       // Download file
       XLSX.writeFile(wb, filename)
@@ -577,6 +745,7 @@ export default function ResultsPage() {
       r.user_name.toLowerCase().includes(term) ||
       r.user_school.toLowerCase().includes(term) ||
       r.user_class.toLowerCase().includes(term) ||
+      (r.education_level && r.education_level.toLowerCase().includes(term)) ||
       r.user_id.toLowerCase().includes(term)
     )
   })
@@ -603,12 +772,12 @@ export default function ResultsPage() {
             {/* Top Toolbar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-shrink-0">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">User Results Summary</h1>
-                <p className="text-gray-600">View and export user answers in a comprehensive format</p>
+                <h1 className="text-3xl font-bold text-gray-900 tracking-tight">User Results Summary</h1>
+                <p className="text-gray-600 text-sm">View comprehensive student demographic, sports profile, and REI assessment results</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <Select value={selectedChallengeId} onValueChange={setSelectedChallengeId}>
-                  <SelectTrigger className="w-[220px] bg-white">
+                  <SelectTrigger className="w-[230px] bg-white shadow-xs">
                     <SelectValue placeholder="Select a challenge" />
                   </SelectTrigger>
                   <SelectContent>
@@ -622,19 +791,29 @@ export default function ResultsPage() {
 
                 <Button
                   variant="outline"
+                  onClick={() => setShowSportsInfo(!showSportsInfo)}
+                  className="flex items-center gap-2 bg-white shadow-xs"
+                  title="Toggle sports profile information"
+                >
+                  <Activity className={`h-4 w-4 ${showSportsInfo ? "text-emerald-600" : "text-gray-400"}`} />
+                  {showSportsInfo ? "Hide Profil Olahraga" : "Show Profil Olahraga"}
+                </Button>
+
+                <Button
+                  variant="outline"
                   onClick={() => setShowQuestions(!showQuestions)}
-                  className="flex items-center gap-2 bg-white"
-                  title={showQuestions ? "Hide questions to see final scores directly" : "Show all question columns"}
+                  className="flex items-center gap-2 bg-white shadow-xs"
+                  title={showQuestions ? "Hide questions to see summary directly" : "Show question answers"}
                 >
                   {showQuestions ? (
                     <>
-                      <EyeOff className="h-4 w-4 text-gray-600" />
-                      Hide Questions
+                      <EyeOff className="h-4 w-4 text-gray-500" />
+                      Hide Soal
                     </>
                   ) : (
                     <>
                       <Eye className="h-4 w-4 text-blue-600" />
-                      Show Questions
+                      Show Soal
                     </>
                   )}
                 </Button>
@@ -642,7 +821,7 @@ export default function ResultsPage() {
                 <Button
                   onClick={exportToExcel}
                   disabled={loading || exporting || results.length === 0}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white shadow-xs"
                 >
                   {exporting ? (
                     <>
@@ -661,58 +840,58 @@ export default function ResultsPage() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-shrink-0">
-              <Card>
+              <Card className="shadow-xs border-gray-200">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium text-gray-700">Total Users</CardTitle>
+                  <Users className="h-4 w-4 text-blue-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{results.length}</div>
+                  <div className="text-2xl font-bold text-gray-900">{results.length}</div>
                   <p className="text-xs text-muted-foreground">
-                    Users who completed this challenge
+                    Students participating in this challenge
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="shadow-xs border-gray-200">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Questions</CardTitle>
-                  <Target className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium text-gray-700">Questions</CardTitle>
+                  <Target className="h-4 w-4 text-emerald-600" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{sortedQuestions.length}</div>
+                  <div className="text-2xl font-bold text-gray-900">{sortedQuestions.length}</div>
                   <p className="text-xs text-muted-foreground">
-                    Total questions in challenge
+                    {is13Plus ? "45 questions (15 R, 15 E, 15 I)" : "15 questions (5 R, 5 E, 5 I)"}
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="shadow-xs border-gray-200">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Challenge</CardTitle>
-                  <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium text-gray-700">Active Challenge</CardTitle>
+                  <Trophy className="h-4 w-4 text-amber-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-lg font-bold truncate">
+                  <div className="text-base font-bold text-gray-900 truncate">
                     {challenges.find(c => c.id === selectedChallengeId)?.title || "None"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Selected challenge
+                    Evaluation mode: {is13Plus ? "Mean Average (Scale 1-5)" : "Score Accumulation"}
                   </p>
                 </CardContent>
               </Card>
             </div>
 
             {/* Results Table Card */}
-            <Card className="flex-1 flex flex-col overflow-hidden">
-              <CardHeader className="flex-shrink-0 pb-3">
+            <Card className="flex-1 flex flex-col overflow-hidden shadow-sm border-gray-200">
+              <CardHeader className="flex-shrink-0 pb-3 border-b bg-gray-50/50">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <CardTitle>Results Overview</CardTitle>
-                    <CardDescription>
+                    <CardTitle className="text-lg">Assessment Overview</CardTitle>
+                    <CardDescription className="text-xs">
                       {showQuestions 
-                        ? "Scroll horizontally to view all questions and scores. Header remains fixed on the left."
-                        : "Question columns hidden. Viewing summary and REI scores."}
+                        ? "Horizontal scroll available. User Info column stays pinned on the left."
+                        : "Compact summary mode. Viewing demographic, sports profile, progress, and REI scores."}
                     </CardDescription>
                   </div>
 
@@ -721,18 +900,18 @@ export default function ResultsPage() {
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
                       <Input
-                        placeholder="Search student, school, class..."
+                        placeholder="Cari nama, sekolah, jenjang, kelas..."
                         value={searchTerm}
                         onChange={(e) => {
                           setSearchTerm(e.target.value)
                           setCurrentPage(1)
                         }}
-                        className="pl-8 w-[240px] h-9 text-xs bg-white"
+                        className="pl-8 w-[260px] h-9 text-xs bg-white shadow-2xs"
                       />
                     </div>
 
                     <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span>Rows:</span>
+                      <span>Baris:</span>
                       <Select 
                         value={String(pageSize)} 
                         onValueChange={(val) => {
@@ -740,7 +919,7 @@ export default function ResultsPage() {
                           setCurrentPage(1)
                         }}
                       >
-                        <SelectTrigger className="w-[85px] h-9 text-xs bg-white">
+                        <SelectTrigger className="w-[85px] h-9 text-xs bg-white shadow-2xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -748,7 +927,7 @@ export default function ResultsPage() {
                           <SelectItem value="25">25</SelectItem>
                           <SelectItem value="50">50</SelectItem>
                           <SelectItem value="100">100</SelectItem>
-                          <SelectItem value="-1">All</SelectItem>
+                          <SelectItem value="-1">Semua</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -759,42 +938,58 @@ export default function ResultsPage() {
               <CardContent className="flex-1 p-0 overflow-hidden flex flex-col">
                 {loading ? (
                   <div className="flex justify-center items-center h-full">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                   </div>
                 ) : filteredResults.length === 0 ? (
-                  <div className="flex justify-center items-center h-full text-gray-500">
-                    {searchTerm ? "No results match your search" : "No results found for the selected challenge"}
+                  <div className="flex justify-center items-center h-full text-gray-500 text-sm">
+                    {searchTerm ? "Tidak ada data yang cocok dengan pencarian" : "Belum ada hasil untuk challenge ini"}
                   </div>
                 ) : (
                   <div className="flex-1 flex flex-col overflow-hidden">
                     <div
-                      className="flex-1 overflow-auto border-t bg-white"
+                      className="flex-1 overflow-auto bg-white"
                       style={{
                         scrollbarWidth: 'thin',
                         scrollbarColor: '#cbd5e1 #f1f5f9'
                       }}
                     >
                       <table className="w-full border-collapse" style={{ minWidth: 'max-content' }}>
-                        <thead className="sticky top-0 bg-white z-30 border-b shadow-xs">
+                        <thead className="sticky top-0 bg-white z-30 border-b shadow-2xs text-gray-700">
                           <tr>
+                            {/* Sticky Left: User Identity */}
                             <th 
-                              className="sticky left-0 bg-white border-r-2 z-40 p-3 text-left font-semibold text-sm border-b shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]" 
-                              style={{ minWidth: '180px' }}
+                              className="sticky left-0 bg-slate-50 border-r-2 border-gray-200 z-40 p-3.5 text-left font-semibold text-xs border-b shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)]" 
+                              style={{ minWidth: '220px' }}
                             >
-                              <div className="flex flex-col">
-                                <span>User Information</span>
-                                <span className="text-xs text-gray-500 font-normal">Name & Date</span>
+                              <div className="flex items-center gap-1.5 text-slate-800">
+                                <UserIcon className="h-3.5 w-3.5 text-slate-600" />
+                                <span>Identitas Siswa</span>
                               </div>
+                              <span className="text-[11px] text-gray-500 font-normal">Nama, Sekolah & Waktu</span>
                             </th>
+
+                            {/* Sports & Demographic Profile Column */}
+                            {showSportsInfo && (
+                              <th 
+                                className="p-3.5 text-left font-semibold text-xs border-b border-r bg-emerald-50/70 text-emerald-950" 
+                                style={{ minWidth: '260px' }}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <Activity className="h-3.5 w-3.5 text-emerald-700" />
+                                  <span>Profil Siswa & Olahraga</span>
+                                </div>
+                                <span className="text-[11px] text-emerald-700/80 font-normal">Jenjang, Klub, Frekuensi & Lomba</span>
+                              </th>
+                            )}
 
                             {/* Question Columns (Conditional) */}
                             {showQuestions && sortedQuestions.map((questionId, index) => (
-                              <th key={questionId} className="p-3 text-left font-semibold text-sm border-b bg-blue-50/70" style={{ minWidth: '280px' }}>
+                              <th key={questionId} className="p-3.5 text-left font-semibold text-xs border-b border-r bg-blue-50/70 text-blue-950" style={{ minWidth: '260px' }}>
                                 <div className="space-y-1">
                                   <div className="font-bold text-blue-700">
-                                    Question {questionDetails.get(questionId)?.number || (index + 1)}
+                                    Soal {questionDetails.get(questionId)?.number || (index + 1)}
                                   </div>
-                                  <div className="font-normal text-xs text-gray-600 leading-tight" style={{
+                                  <div className="font-normal text-[11px] text-gray-600 leading-tight" style={{
                                     display: '-webkit-box',
                                     WebkitLineClamp: 2,
                                     WebkitBoxOrient: 'vertical',
@@ -806,45 +1001,65 @@ export default function ResultsPage() {
                               </th>
                             ))}
 
-                            <th className="p-3 text-center font-semibold text-sm border-b bg-amber-50" style={{ minWidth: '140px' }}>
-                              <div className="space-y-1">
-                                <div className="font-bold text-amber-800">
-                                  Pernyataan Terisi
-                                </div>
-                                <div className="font-normal text-xs text-gray-500">
-                                  (Terisi / Total)
-                                </div>
+                            {/* Pernyataan Terisi */}
+                            <th className="p-3.5 text-center font-semibold text-xs border-b border-r bg-amber-50/80 text-amber-950" style={{ minWidth: '140px' }}>
+                              <div className="font-bold text-amber-800">
+                                Pernyataan Terisi
+                              </div>
+                              <div className="font-normal text-[11px] text-amber-700/80">
+                                (Terisi / Total)
                               </div>
                             </th>
-                            <th className="p-3 text-left font-semibold text-sm border-b bg-green-50" style={{ minWidth: '110px' }}>
-                              REI Scores
+
+                            {/* REI Scores */}
+                            <th className="p-3.5 text-left font-semibold text-xs border-b border-r bg-green-50/80 text-green-950" style={{ minWidth: '130px' }}>
+                              <div className="font-bold text-green-800">
+                                {is13Plus ? "REI Rerata (Mean)" : "REI Skor"}
+                              </div>
+                              <div className="font-normal text-[11px] text-green-700/80">
+                                {is13Plus ? "Skala 1.00 – 5.00" : "Poin Indikator"}
+                              </div>
                             </th>
-                            <th className="p-3 text-left font-semibold text-sm border-b bg-green-50" style={{ minWidth: '220px' }}>
-                              Category Labels
+
+                            {/* Category Labels */}
+                            <th className="p-3.5 text-left font-semibold text-xs border-b bg-green-50/80 text-green-950" style={{ minWidth: '200px' }}>
+                              <div className="font-bold text-green-800">
+                                Kategori & Label
+                              </div>
+                              <div className="font-normal text-[11px] text-green-700/80">
+                                {is13Plus ? "Tinggi / Sedang / Rendah" : "Kategori Anak Ramah"}
+                              </div>
                             </th>
                           </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="divide-y divide-gray-100 text-gray-800">
                           {paginatedResults.map((result, rowIndex) => {
                             return (
                               <tr
                                 key={result.user_id}
-                                className={rowIndex % 2 === 0 ? "bg-white hover:bg-gray-50/80" : "bg-gray-50/40 hover:bg-gray-50"}
+                                className={rowIndex % 2 === 0 ? "bg-white hover:bg-blue-50/20 transition-colors" : "bg-slate-50/40 hover:bg-blue-50/30 transition-colors"}
                               >
+                                {/* Sticky Column: User Identity */}
                                 <td 
-                                  className="sticky left-0 bg-white border-r-2 z-20 p-3 font-medium border-b shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]" 
-                                  style={{ minWidth: '180px' }}
+                                  className="sticky left-0 bg-white border-r-2 border-gray-200 z-20 p-3.5 font-medium border-b shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)]" 
+                                  style={{ minWidth: '220px' }}
                                 >
                                   <div className="space-y-1.5">
-                                    <div className="font-semibold text-sm text-gray-900 leading-tight" title={result.user_name}>
+                                    <div className="font-bold text-sm text-gray-900 leading-tight" title={result.user_name}>
                                       {result.user_name}
                                     </div>
-                                    <div className="text-xs text-gray-600 space-y-0.5">
-                                      <div><strong>ID:</strong> {result.user_id.substring(0, 8)}...</div>
-                                      <div><strong>School:</strong> {result.user_school || "—"}</div>
-                                      <div><strong>Gender:</strong> {result.user_gender || "—"} | <strong>Age:</strong> {result.user_age || "—"}</div>
-                                      <div><strong>Class:</strong> {result.user_class || "—"}</div>
-                                      <div className="pt-1 text-[11px] text-blue-600 flex items-center gap-1 font-normal">
+                                    <div className="text-xs text-gray-600 space-y-1">
+                                      <div className="text-[11px] text-gray-500 font-mono">
+                                        <strong>ID:</strong> {result.user_id.substring(0, 8)}...
+                                      </div>
+                                      <div className="flex items-center gap-1 text-gray-700 font-medium">
+                                        <School className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                                        <span className="truncate" title={result.user_school || "—"}>{result.user_school || "—"}</span>
+                                      </div>
+                                      <div className="text-[11px] text-gray-500">
+                                        Kelas: <strong>{result.user_class || "—"}</strong>
+                                      </div>
+                                      <div className="pt-0.5 text-[11px] text-blue-600 flex items-center gap-1 font-medium">
                                         <Calendar className="h-3 w-3 inline flex-shrink-0" />
                                         <span>{formatDate(result.answered_at)}</span>
                                       </div>
@@ -852,12 +1067,52 @@ export default function ResultsPage() {
                                   </div>
                                 </td>
 
+                                {/* Sports & Demographics Profile Cell */}
+                                {showSportsInfo && (
+                                  <td className="p-3.5 text-xs border-b border-r bg-emerald-50/10" style={{ minWidth: '260px' }}>
+                                    <div className="space-y-1.5 text-gray-700">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-[11px] font-semibold">
+                                          {result.education_level || "Jenjang: —"}
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[11px]">
+                                          {result.user_gender || "—"} ({result.user_age ? `${result.user_age} th` : "—"})
+                                        </span>
+                                      </div>
+
+                                      <div className="pt-1 text-[11px] space-y-1 text-gray-600 border-t border-gray-100">
+                                        <div>
+                                          <strong>Klub Olahraga:</strong>{" "}
+                                          <span className={`inline-block px-1.5 py-0.2 rounded font-medium ${
+                                            result.is_active_sports_member && result.is_active_sports_member.toLowerCase().includes("ya")
+                                              ? "bg-green-100 text-green-800"
+                                              : "bg-gray-100 text-gray-600"
+                                          }`}>
+                                            {result.is_active_sports_member || "—"}
+                                          </span>
+                                        </div>
+                                        <div>
+                                          <strong>Frekuensi & Durasi:</strong> {result.sports_frequency || "—"}{" "}
+                                          {result.sports_duration ? `(${result.sports_duration})` : ""}
+                                        </div>
+                                        <div>
+                                          <strong>Minat Olahraga:</strong> {result.sports_liking || "—"}
+                                        </div>
+                                        <div>
+                                          <strong>Pengalaman Lomba:</strong> {result.has_sports_competition || "—"} |{" "}
+                                          <strong>Tertarik:</strong> {result.likes_sports_competition || "—"}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                )}
+
                                 {/* Question Columns (Conditional) */}
                                 {showQuestions && sortedQuestions.map((questionId) => (
-                                  <td key={questionId} className="p-3 text-sm border-b" style={{ minWidth: '280px' }}>
-                                    <div className="space-y-2">
+                                  <td key={questionId} className="p-3.5 text-xs border-b border-r" style={{ minWidth: '260px' }}>
+                                    <div className="space-y-1.5">
                                       <div
-                                        className="text-gray-800 leading-tight"
+                                        className="text-gray-800 leading-tight text-xs"
                                         style={{
                                           display: '-webkit-box',
                                           WebkitLineClamp: 3,
@@ -866,17 +1121,18 @@ export default function ResultsPage() {
                                         }}
                                         title={result.answers[questionId]?.selected_option || "No answer"}
                                       >
-                                        <strong>Answer:</strong> {result.answers[questionId]?.selected_option || "No answer"}
+                                        <strong>Jawaban:</strong> {result.answers[questionId]?.selected_option || "No answer"}
                                       </div>
                                       <div>
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                          Score: {result.answers[questionId]?.score || 0}
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                          Poin: {result.answers[questionId]?.score || 0}
                                         </span>
                                       </div>
                                     </div>
                                   </td>
                                 ))}
 
+                                {/* Pernyataan Terisi */}
                                 {(() => {
                                   const answeredCount = sortedQuestions.filter(qId => {
                                     const ans = result.answers[qId]
@@ -889,7 +1145,7 @@ export default function ResultsPage() {
                                   const isPartial = answeredCount > 0 && answeredCount < totalCount
 
                                   return (
-                                    <td className="p-3 border-b text-center" style={{ minWidth: '140px' }}>
+                                    <td className="p-3.5 border-b border-r text-center" style={{ minWidth: '140px' }}>
                                       <div className="flex flex-col items-center justify-center gap-1">
                                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${isComplete
                                             ? "bg-green-100 text-green-800 border border-green-300"
@@ -907,38 +1163,43 @@ export default function ResultsPage() {
                                   )
                                 })()}
 
-                                <td className="p-3 border-b text-sm" style={{ minWidth: '110px' }}>
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-xs font-medium w-4">R:</span>
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${result.rei_data?.respect !== undefined ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                                        }`}>
+                                {/* REI Scores */}
+                                <td className="p-3.5 border-b border-r text-xs" style={{ minWidth: '130px' }}>
+                                  <div className="space-y-1 font-mono">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-gray-500 w-4">R:</span>
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${
+                                        result.rei_data?.respect !== undefined ? "bg-green-100 text-green-800 border border-green-200" : "bg-gray-100 text-gray-700"
+                                      }`}>
                                         {formatReiScore(result.rei_data?.respect)}
                                       </span>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-xs font-medium w-4">E:</span>
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${result.rei_data?.equity !== undefined ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                                        }`}>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-gray-500 w-4">E:</span>
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${
+                                        result.rei_data?.equity !== undefined ? "bg-green-100 text-green-800 border border-green-200" : "bg-gray-100 text-gray-700"
+                                      }`}>
                                         {formatReiScore(result.rei_data?.equity)}
                                       </span>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-xs font-medium w-4">I:</span>
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${result.rei_data?.inclusion !== undefined ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                                        }`}>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-gray-500 w-4">I:</span>
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${
+                                        result.rei_data?.inclusion !== undefined ? "bg-green-100 text-green-800 border border-green-200" : "bg-gray-100 text-gray-700"
+                                      }`}>
                                         {formatReiScore(result.rei_data?.inclusion)}
                                       </span>
                                     </div>
                                   </div>
                                 </td>
 
-                                <td className="p-3 text-sm border-b" style={{ minWidth: '220px' }}>
+                                {/* Category Labels */}
+                                <td className="p-3.5 text-xs border-b" style={{ minWidth: '200px' }}>
                                   <div className="space-y-1 text-xs">
-                                    <div><strong>Main:</strong> {getMainCategory(result)}</div>
-                                    <div><strong>Respect:</strong> {getRespectCategory(result)}</div>
-                                    <div><strong>Equity:</strong> {getEquityCategory(result)}</div>
-                                    <div><strong>Inclusion:</strong> {getInclusionCategory(result)}</div>
+                                    <div><strong className="text-gray-600">Main:</strong> <span className="font-semibold text-gray-900">{getMainCategory(result)}</span></div>
+                                    <div><strong className="text-gray-600">Respect:</strong> <span className="text-gray-800">{getRespectCategory(result)}</span></div>
+                                    <div><strong className="text-gray-600">Equity:</strong> <span className="text-gray-800">{getEquityCategory(result)}</span></div>
+                                    <div><strong className="text-gray-600">Inclusion:</strong> <span className="text-gray-800">{getInclusionCategory(result)}</span></div>
                                   </div>
                                 </td>
                               </tr>
@@ -949,17 +1210,17 @@ export default function ResultsPage() {
                     </div>
 
                     {/* Pagination Bar */}
-                    <div className="border-t bg-gray-50 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
-                      <div className="text-xs text-gray-600">
-                        Showing{" "}
-                        <strong>
+                    <div className="border-t bg-gray-50/80 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
+                      <div className="text-xs text-gray-600 font-medium">
+                        Menampilkan{" "}
+                        <strong className="text-gray-900">
                           {filteredResults.length === 0 ? 0 : startIndex + 1}
                         </strong>{" "}
-                        to{" "}
-                        <strong>
+                        sampai{" "}
+                        <strong className="text-gray-900">
                           {pageSize === -1 ? filteredResults.length : Math.min(startIndex + pageSize, filteredResults.length)}
                         </strong>{" "}
-                        of <strong>{filteredResults.length}</strong> users {searchTerm && `(filtered from ${results.length})`}
+                        dari <strong className="text-gray-900">{filteredResults.length}</strong> siswa {searchTerm && `(difilter dari total ${results.length})`}
                       </div>
 
                       {pageSize !== -1 && totalPages > 1 && (
@@ -969,14 +1230,14 @@ export default function ResultsPage() {
                             size="sm"
                             onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                             disabled={currentPage === 1}
-                            className="h-8 px-2 bg-white"
+                            className="h-8 px-2.5 bg-white shadow-2xs text-xs font-medium"
                           >
-                            <ChevronLeft className="h-4 w-4" />
-                            <span className="sr-only">Previous</span>
+                            <ChevronLeft className="h-4 w-4 mr-1" />
+                            Prev
                           </Button>
                           
                           <span className="text-xs text-gray-700 font-medium px-2">
-                            Page {currentPage} of {totalPages}
+                            Halaman {currentPage} dari {totalPages}
                           </span>
 
                           <Button
@@ -984,10 +1245,10 @@ export default function ResultsPage() {
                             size="sm"
                             onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
                             disabled={currentPage >= totalPages}
-                            className="h-8 px-2 bg-white"
+                            className="h-8 px-2.5 bg-white shadow-2xs text-xs font-medium"
                           >
-                            <ChevronRight className="h-4 w-4" />
-                            <span className="sr-only">Next</span>
+                            Next
+                            <ChevronRight className="h-4 w-4 ml-1" />
                           </Button>
                         </div>
                       )}
